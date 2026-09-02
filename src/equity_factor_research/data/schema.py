@@ -8,6 +8,7 @@ REQUIRED_COLUMNS = (
     "exchange",
     "security_type",
     "return_ex_delist",
+    "delisting_event",
     "delisting_return",
     "total_return",
     "price",

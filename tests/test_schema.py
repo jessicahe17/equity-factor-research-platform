@@ -15,6 +15,7 @@ def make_valid_panel() -> pd.DataFrame:
             "exchange": ["NYSE", "NASDAQ", "NYSE"],
             "security_type": ["common_stock", "common_stock", "common_stock"],
             "return_ex_delist": [0.05, -0.02, 0.03],
+            "delisting_event": [False, False, False],
             "delisting_return": [None, None, None],
             "total_return": [0.05, -0.02, 0.03],
             "price": [50.0, 25.0, 51.5],
