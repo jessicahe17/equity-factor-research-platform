@@ -1,5 +1,7 @@
 import pandas as pd
 import pytest
+import numpy as np
+
 from equity_factor_research.factors.momentum import (
     add_momentum_signal, 
     add_momentum_eligibility,
@@ -253,6 +255,79 @@ def test_add_momentum_signal_allows_minus_one_return():
     assert january_2025 == pytest.approx(-1.0)
 
 
+def test_add_momentum_signal_supports_6_2_window():
+    dates = pd.date_range(
+        "2024-06-30",
+        "2025-01-31",
+        freq="ME",
+    )
+
+    panel = pd.DataFrame(
+        {
+            "security_id": [1] * len(dates),
+            "date": dates,
+            "total_return": [
+                0.50,  # Jun: outside 6-2 window
+                0.10,  # Jul
+                0.10,  # Aug
+                0.10,  # Sep
+                0.10,  # Oct
+                0.10,  # Nov
+                0.80,  # Dec: t-1, skipped
+                0.00,  # Jan outcome month
+            ],
+        }
+    )
+
+    result = add_momentum_signal(
+        panel,
+        start_lag=6,
+        end_lag=2,
+    )
+
+    january = result.loc[
+        result["date"] == pd.Timestamp("2025-01-31")
+    ].iloc[0]
+
+    expected = (1.10 ** 5) - 1
+
+    assert january["momentum"] == pytest.approx(expected)
+
+
+def test_add_momentum_signal_supports_12_1_window():
+    dates = pd.date_range(
+        "2024-01-31",
+        "2025-01-31",
+        freq="ME",
+    )
+
+    panel = pd.DataFrame(
+        {
+            "security_id": [1] * len(dates),
+            "date": dates,
+            "total_return": [
+                0.00, 0.00, 0.00, 0.00,
+                0.00, 0.00, 0.00, 0.00,
+                0.00, 0.00, 0.00,
+                0.20,  # Dec = t-1, must be included
+                0.00,  # Jan outcome month
+            ],
+        }
+    )
+
+    result = add_momentum_signal(
+        panel,
+        start_lag=12,
+        end_lag=1,
+    )
+
+    january = result.loc[
+        result["date"] == pd.Timestamp("2025-01-31")
+    ].iloc[0]
+
+    assert january["momentum"] == pytest.approx(0.20)
+
+
 def test_add_momentum_eligibility_with_complete_history():
     panel = pd.DataFrame(
         {
@@ -389,6 +464,145 @@ def test_add_momentum_eligibility_allows_missing_outcome_return():
     ].iloc[0]
     
     assert eligible
+
+
+def test_add_momentum_eligibility_supports_6_2_window():
+    dates = pd.date_range(
+        "2024-06-30",
+        "2025-01-31",
+        freq="ME",
+    )
+
+    panel = pd.DataFrame(
+        {
+            "security_id": [1] * len(dates),
+            "date": dates,
+            "total_return": [
+                0.50,  # Jun: outside 6-2 window
+                0.01,  # Jul
+                0.01,  # Aug
+                0.01,  # Sep
+                0.01,  # Oct
+                0.01,  # Nov
+                np.nan,  # Dec = t-1, irrelevant for 6-2
+                0.00,  # Jan outcome month
+            ],
+        }
+    )
+
+    result = add_momentum_eligibility(
+        panel,
+        start_lag=6,
+        end_lag=2,
+    )
+
+    january = result.loc[
+        result["date"] == pd.Timestamp("2025-01-31")
+    ].iloc[0]
+
+    assert january["momentum_eligible"]
+
+
+def test_add_momentum_eligibility_6_2_rejects_missing_required_month():
+    dates = pd.to_datetime(
+        [
+            "2024-06-30",
+            "2024-07-31",
+            "2024-08-31",
+            # Sep deliberately absent
+            "2024-10-31",
+            "2024-11-30",
+            "2024-12-31",
+            "2025-01-31",
+        ]
+    )
+
+    panel = pd.DataFrame(
+        {
+            "security_id": [1] * len(dates),
+            "date": dates,
+            "total_return": [0.01] * len(dates),
+        }
+    )
+
+    result = add_momentum_eligibility(
+        panel,
+        start_lag=6,
+        end_lag=2,
+    )
+
+    january = result.loc[
+        result["date"] == pd.Timestamp("2025-01-31")
+    ].iloc[0]
+
+    assert not january["momentum_eligible"]
+
+
+def test_add_momentum_eligibility_12_1_requires_t_minus_1():
+    dates = pd.date_range(
+        "2024-01-31",
+        "2025-01-31",
+        freq="ME",
+    )
+
+    returns = [0.01] * len(dates)
+    returns[-2] = np.nan  # Dec 2024 = t-1
+
+    panel = pd.DataFrame(
+        {
+            "security_id": [1] * len(dates),
+            "date": dates,
+            "total_return": returns,
+        }
+    )
+
+    result = add_momentum_eligibility(
+        panel,
+        start_lag=12,
+        end_lag=1,
+    )
+
+    january = result.loc[
+        result["date"] == pd.Timestamp("2025-01-31")
+    ].iloc[0]
+
+    assert not january["momentum_eligible"]
+
+
+def test_add_momentum_eligibility_6_2_ignores_t_minus_1():
+    dates = pd.date_range(
+        "2024-07-31",
+        "2025-01-31",
+        freq="ME",
+    )
+
+    panel = pd.DataFrame(
+        {
+            "security_id": [1] * len(dates),
+            "date": dates,
+            "total_return": [
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                np.nan,  # Dec = t-1
+                0.00,
+            ],
+        }
+    )
+
+    result = add_momentum_eligibility(
+        panel,
+        start_lag=6,
+        end_lag=2,
+    )
+
+    january = result.loc[
+        result["date"] == pd.Timestamp("2025-01-31")
+    ].iloc[0]
+
+    assert january["momentum_eligible"]
 
 
 def test_find_momentum_inconsistencies():

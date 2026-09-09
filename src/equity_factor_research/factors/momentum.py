@@ -19,13 +19,33 @@ def _build_complete_monthly_returns(group: pd.DataFrame) -> pd.Series:
     )
 
 
-def add_momentum_signal(panel: pd.DataFrame) -> pd.DataFrame:
-    """Add 12-2 momentum using total returns from months t-12 through t-2.
+def add_momentum_signal(
+    panel: pd.DataFrame,
+    start_lag: int = 12,
+    end_lag: int = 2,
+) -> pd.DataFrame:
+    """Add Momentum using total returns from t-start_lag through t-end_lag.
 
-    The signal is labeled by outcome month t. The immediately preceding
-    month t-1 is skipped, and all 11 required calendar months must exist
-    with non-missing returns.
+    The signal is labeled by outcome month t. By default, this computes
+    conventional 12-2 Momentum using returns from t-12 through t-2.
+    All required calendar months must exist with non-missing returns.
     """
+
+    for name, value in {
+        "start_lag": start_lag,
+        "end_lag": end_lag,
+    }.items():
+        if (
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or value <= 0
+        ):
+            raise ValueError(f"{name} must be a positive integer.")
+
+    if start_lag < end_lag:
+        raise ValueError("start_lag must be greater than or equal to end_lag.")
+
+    window_size = start_lag - end_lag + 1
 
     result = panel.copy()
     momentum_parts = []
@@ -34,12 +54,15 @@ def add_momentum_signal(panel: pd.DataFrame) -> pd.DataFrame:
         group = group.sort_values("date")
         returns = _build_complete_monthly_returns(group)
 
-        signal_returns = returns.shift(2)
+        signal_returns = returns.shift(end_lag)
         gross_returns = 1 + signal_returns
 
         momentum = (
             gross_returns
-            .rolling(window=11, min_periods=11)
+            .rolling(
+                window=window_size,
+                min_periods=window_size,
+            )
             .apply(np.prod, raw=True)
             - 1
         )
@@ -48,7 +71,9 @@ def add_momentum_signal(panel: pd.DataFrame) -> pd.DataFrame:
             {
                 "security_id": security_id,
                 "date": group["date"].to_numpy(),
-                "momentum": momentum.reindex(group["date"]).to_numpy(),
+                "momentum": momentum.reindex(
+                    group["date"]
+                ).to_numpy(),
             }
         )
 
@@ -70,8 +95,34 @@ def add_momentum_signal(panel: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def add_momentum_eligibility(panel: pd.DataFrame) -> pd.DataFrame:
-    """Add whether each row has valid history for a 12-2 momentum signal."""
+def add_momentum_eligibility(
+    panel: pd.DataFrame,
+    start_lag: int = 12,
+    end_lag: int = 2,
+) -> pd.DataFrame:
+    """
+    Add whether each row has valid history for the Momentum signal.
+
+    By default, this checks the conventional 12-2 specification. All required
+    calendar months from t-start_lag through t-end_lag must exist with
+    non-missing total returns.
+    """
+
+    for name, value in {
+        "start_lag": start_lag,
+        "end_lag": end_lag,
+    }.items():
+        if (
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or value <= 0
+        ):
+            raise ValueError(f"{name} must be a positive integer.")
+
+    if start_lag < end_lag:
+        raise ValueError("start_lag must be greater than or equal to end_lag.")
+
+    window_size = start_lag - end_lag + 1
 
     result = panel.copy()
     eligibility_parts = []
@@ -79,14 +130,18 @@ def add_momentum_eligibility(panel: pd.DataFrame) -> pd.DataFrame:
     for security_id, group in result.groupby("security_id"):
         group = group.sort_values("date")
         returns = _build_complete_monthly_returns(group)
-        required_returns = returns.shift(2)
+
+        required_returns = returns.shift(end_lag)
 
         eligible = (
             required_returns
             .notna()
-            .rolling(window=11, min_periods=11)
+            .rolling(
+                window=window_size,
+                min_periods=window_size,
+            )
             .sum()
-            .eq(11)
+            .eq(window_size)
         )
 
         group_eligibility = pd.DataFrame(

@@ -13,6 +13,7 @@ from equity_factor_research.factors.momentum import(
     add_momentum_signal,
     add_momentum_eligibility,
 )
+from equity_factor_research.data.universe import add_universe_membership
 
 
 def test_calculate_monthly_rank_ic_perfect_positive_relation():
@@ -702,3 +703,43 @@ def test_rank_ic_predictive_analysis_integration():
 
     assert early["n_months"] == 12
     assert early["mean_ic"] == pytest.approx(1.0)
+
+
+def test_universe_size_sensitivity_rank_ic_integration():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2, 3, 4, 5, 6],
+            "date": pd.to_datetime(
+                ["2025-01-31"] * 6
+            ),
+            "base_eligible": [True] * 6,
+            "lagged_market_cap": [600.0, 500.0, 400.0, 300.0, 200.0, 100.0],
+            "momentum": [0.10, 0.20, 0.30, 0.40, 0.50, 0.60],
+            "momentum_eligible": [True] * 6,
+            "total_return": [0.04, 0.05, 0.06, 0.03, 0.02, 0.01],
+        }
+    )
+    top_3 = add_universe_membership(panel, n=3)
+    top_6 = add_universe_membership(panel, n=6)
+
+    rank_ic_top_3 = calculate_monthly_rank_ic(top_3)
+    rank_ic_top_6 = calculate_monthly_rank_ic(top_6)
+
+    assert len(rank_ic_top_3) == 1
+    assert len(rank_ic_top_6) == 1
+
+    assert (
+        rank_ic_top_3.iloc[0]["rank_ic"]
+        == pytest.approx(1.0)
+    )
+
+    assert (
+        rank_ic_top_6.iloc[0]["rank_ic"]
+        == pytest.approx(-0.7714285714)
+    )
+
+    assert rank_ic_top_3.iloc[0]["n_obs"] == 3
+    assert rank_ic_top_6.iloc[0]["n_obs"] == 6
+
+    assert top_3["in_universe"].sum() == 3
+    assert top_6["in_universe"].sum() == 6

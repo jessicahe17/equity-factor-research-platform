@@ -271,3 +271,75 @@ def summarize_long_short_returns_by_subperiod(
         )
 
     return pd.DataFrame(rows)
+
+
+def calculate_monthly_value_weighted_quintile_returns(
+    panel: pd.DataFrame,
+) -> pd.DataFrame:
+    """Calculate value-weighted monthly Momentum quintile returns."""
+
+    assigned = panel.loc[panel["momentum_quintile"].notna()].copy()
+
+    records = []
+
+    for (date, quintile), group in assigned.groupby(
+        ["date", "momentum_quintile"],
+        sort=True,
+    ):
+        n_assigned = len(group)
+
+        valid_weight = (
+            group["lagged_market_cap"].notna()
+            & (group["lagged_market_cap"] > 0)
+        )
+
+        weightable = group.loc[valid_weight]
+
+        n_weightable = int(valid_weight.sum())
+
+        assigned_weight = weightable["lagged_market_cap"].sum()
+
+        observed = weightable.loc[
+            weightable["total_return"].notna()
+        ]
+
+        n_obs = len(observed)
+
+        observed_weight = observed["lagged_market_cap"].sum()
+
+        if assigned_weight > 0:
+            weight_coverage = observed_weight / assigned_weight
+        else:
+            weight_coverage = np.nan
+
+        if n_obs == 0:
+            portfolio_return = np.nan
+        else:
+            portfolio_return = (
+                observed["lagged_market_cap"]
+                * observed["total_return"]
+            ).sum() / observed_weight
+
+        records.append(
+            {
+                "date": date,
+                "momentum_quintile": quintile,
+                "portfolio_return": portfolio_return,
+                "n_assigned": n_assigned,
+                "n_weightable": n_weightable,
+                "n_obs": n_obs,
+                "weight_coverage": weight_coverage,
+            }
+        )
+
+    columns = [
+        "date",
+        "momentum_quintile",
+        "portfolio_return",
+        "n_assigned",
+        "n_weightable",
+        "n_obs",
+        "weight_coverage",
+    ]
+
+    return pd.DataFrame(records, columns=columns)

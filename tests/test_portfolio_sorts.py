@@ -9,11 +9,13 @@ from equity_factor_research.analysis.portfolio_sorts import (
     summarize_long_short_returns,
     calculate_long_short_rolling_diagnostics,
     summarize_long_short_returns_by_subperiod,
+    calculate_monthly_value_weighted_quintile_returns,
 )
 from equity_factor_research.factors.momentum import(
     add_momentum_signal,
     add_momentum_eligibility,
 )
+from equity_factor_research.data.universe import add_universe_membership
 
 
 def test_assign_momentum_quintiles():
@@ -966,3 +968,509 @@ def test_momentum_portfolio_analysis_integration():
     ] == pytest.approx(
         expected_mean
     )
+
+
+def test_calculate_monthly_value_weighted_quintile_returns():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2],
+            "date": pd.to_datetime(["2025-01-31", "2025-01-31"]),
+            "momentum_quintile": [1, 1],
+            "lagged_market_cap": [100.0, 300.0],
+            "total_return": [-0.10, 0.02],
+        }
+    )
+
+    result = calculate_monthly_value_weighted_quintile_returns(panel)
+
+    assert len(result) == 1
+
+    row = result.iloc[0]
+
+    assert row["date"] == pd.Timestamp("2025-01-31")
+    assert row["momentum_quintile"] == 1
+    assert row["n_assigned"] == 2
+    assert row["n_weightable"] == 2
+    assert row["n_obs"] == 2
+    assert row["weight_coverage"] == pytest.approx(1.0)
+    assert row["portfolio_return"] == pytest.approx(-0.01)
+
+
+def test_value_weighted_quintile_returns_renormalize_missing_returns():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2],
+            "date": pd.to_datetime(["2025-01-31", "2025-01-31"]),
+            "momentum_quintile": [5, 5],
+            "lagged_market_cap": [60.0, 40.0],
+            "total_return": [0.05, np.nan],
+        }
+    )
+
+    result = calculate_monthly_value_weighted_quintile_returns(panel)
+
+    row = result.iloc[0]
+
+    assert row["n_assigned"] == 2
+    assert row["n_weightable"] == 2
+    assert row["n_obs"] == 1
+    assert row["weight_coverage"] == pytest.approx(0.60)
+    assert row["portfolio_return"] == pytest.approx(0.05)
+
+
+def test_value_weighted_quintile_returns_all_returns_missing():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2],
+            "date": pd.to_datetime(["2025-01-31", "2025-01-31"]),
+            "momentum_quintile": [3, 3],
+            "lagged_market_cap": [100.0, 300.0],
+            "total_return": [np.nan, np.nan],
+        }
+    )
+
+    result = calculate_monthly_value_weighted_quintile_returns(panel)
+
+    row = result.iloc[0]
+
+    assert row["n_assigned"] == 2
+    assert row["n_weightable"] == 2
+    assert row["n_obs"] == 0
+    assert row["weight_coverage"] == pytest.approx(0.0)
+    assert pd.isna(row["portfolio_return"])
+
+
+def test_value_weighted_quintile_returns_exclude_invalid_weights():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2, 3],
+            "date": pd.to_datetime(
+                [
+                    "2025-01-31",
+                    "2025-01-31",
+                    "2025-01-31",
+                ]
+            ),
+            "momentum_quintile": [2, 2, 2],
+            "lagged_market_cap": [100.0, np.nan, 0.0],
+            "total_return": [0.05, 0.20, 0.30],
+        }
+    )
+
+    result = calculate_monthly_value_weighted_quintile_returns(panel)
+
+    row = result.iloc[0]
+
+    assert row["n_assigned"] == 3
+    assert row["n_weightable"] == 1
+    assert row["n_obs"] == 1
+    assert row["weight_coverage"] == pytest.approx(1.0)
+    assert row["portfolio_return"] == pytest.approx(0.05)
+
+
+def test_value_weighted_quintile_returns_no_valid_weights():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2],
+            "date": pd.to_datetime(["2025-01-31", "2025-01-31"]),
+            "momentum_quintile": [4, 4],
+            "lagged_market_cap": [np.nan, 0.0],
+            "total_return": [0.05, 0.10],
+        }
+    )
+
+    result = calculate_monthly_value_weighted_quintile_returns(panel)
+
+    row = result.iloc[0]
+
+    assert row["n_assigned"] == 2
+    assert row["n_weightable"] == 0
+    assert row["n_obs"] == 0
+    assert pd.isna(row["weight_coverage"])
+    assert pd.isna(row["portfolio_return"])
+
+
+def test_value_weighted_quintile_returns_multiple_months():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2, 1, 2],
+            "date": pd.to_datetime(
+                [
+                    "2025-01-31",
+                    "2025-01-31",
+                    "2025-02-28",
+                    "2025-02-28",
+                ]
+            ),
+            "momentum_quintile": [5, 5, 5, 5],
+            "lagged_market_cap": [
+                100.0, 300.0,
+                300.0, 100.0,
+            ],
+            "total_return": [
+                0.00, 0.04,
+                0.00, 0.04,
+            ],
+        }
+    )
+
+    result = calculate_monthly_value_weighted_quintile_returns(panel)
+
+    assert len(result) == 2
+
+    january = result.loc[
+        result["date"] == pd.Timestamp("2025-01-31")
+    ].iloc[0]
+
+    february = result.loc[
+        result["date"] == pd.Timestamp("2025-02-28")
+    ].iloc[0]
+
+    assert january["portfolio_return"] == pytest.approx(0.03)
+    assert february["portfolio_return"] == pytest.approx(0.01)
+
+
+def test_value_weighted_quintile_returns_no_assigned_stocks():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2],
+            "date": pd.to_datetime(["2025-01-31", "2025-01-31"]),
+            "momentum_quintile": [np.nan, np.nan],
+            "lagged_market_cap": [100.0, 300.0],
+            "total_return": [0.05, 0.10],
+        }
+    )
+
+    result = calculate_monthly_value_weighted_quintile_returns(
+        panel
+    )
+
+    assert result.empty
+
+    assert list(result.columns) == [
+        "date",
+        "momentum_quintile",
+        "portfolio_return",
+        "n_assigned",
+        "n_weightable",
+        "n_obs",
+        "weight_coverage",
+    ]
+
+
+def test_value_weighted_quintile_returns_multiple_quintiles():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2, 3, 4],
+            "date": pd.to_datetime(
+                [
+                    "2025-01-31",
+                    "2025-01-31",
+                    "2025-01-31",
+                    "2025-01-31",
+                ]
+            ),
+            "momentum_quintile": [1, 1, 5, 5],
+            "lagged_market_cap": [
+                100.0, 300.0,
+                300.0, 100.0,
+            ],
+            "total_return": [
+                -0.10, 0.02,
+                0.10, -0.02,
+            ],
+        }
+    )
+
+    result = calculate_monthly_value_weighted_quintile_returns(panel)
+
+    assert len(result) == 2
+
+    q1 = result.loc[
+        result["momentum_quintile"] == 1
+    ].iloc[0]
+
+    q5 = result.loc[
+        result["momentum_quintile"] == 5
+    ].iloc[0]
+
+    assert q1["portfolio_return"] == pytest.approx(-0.01)
+    assert q5["portfolio_return"] == pytest.approx(0.07)
+
+    assert q1["n_assigned"] == 2
+    assert q5["n_assigned"] == 2
+
+    assert q1["n_weightable"] == 2
+    assert q5["n_weightable"] == 2
+
+    assert q1["n_obs"] == 2
+    assert q5["n_obs"] == 2
+
+    assert q1["weight_coverage"] == pytest.approx(1.0)
+    assert q5["weight_coverage"] == pytest.approx(1.0)
+
+
+def test_value_weighted_quintile_returns_feed_long_short_analysis():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2, 3, 4],
+            "date": pd.to_datetime(
+                [
+                    "2025-01-31",
+                    "2025-01-31",
+                    "2025-01-31",
+                    "2025-01-31",
+                ]
+            ),
+            "momentum_quintile": [1, 1, 5, 5],
+            "lagged_market_cap": [
+                100.0, 300.0,
+                300.0, 100.0,
+            ],
+            "total_return": [
+                -0.10, 0.02,
+                0.10, -0.02,
+            ],
+        }
+    )
+
+    quintile_returns = (
+        calculate_monthly_value_weighted_quintile_returns(
+            panel
+        )
+    )
+
+    long_short = calculate_monthly_long_short_returns(quintile_returns)
+
+    assert len(long_short) == 1
+
+    row = long_short.iloc[0]
+
+    assert row["q1_return"] == pytest.approx(-0.01)
+    assert row["q5_return"] == pytest.approx(0.07)
+    assert row["long_short_return"] == pytest.approx(0.08)
+
+
+def test_equal_weighted_and_value_weighted_quintile_returns_differ():
+    panel = pd.DataFrame(
+        {
+            "security_id": [1, 2],
+            "date": pd.to_datetime(["2025-01-31", "2025-01-31"]),
+            "momentum_quintile": [1, 1],
+            "lagged_market_cap": [100.0, 300.0],
+            "total_return": [-0.10, 0.02],
+        }
+    )
+
+    equal_weighted = calculate_monthly_quintile_returns(panel)
+
+    value_weighted = (
+        calculate_monthly_value_weighted_quintile_returns(
+            panel
+        )
+    )
+
+    ew_row = equal_weighted.iloc[0]
+    vw_row = value_weighted.iloc[0]
+
+    assert ew_row["n_assigned"] == 2
+    assert vw_row["n_assigned"] == 2
+
+    assert ew_row["portfolio_return"] == pytest.approx(-0.04)
+    assert vw_row["portfolio_return"] == pytest.approx(-0.01)
+
+    assert (
+        ew_row["portfolio_return"]
+        != pytest.approx(vw_row["portfolio_return"])
+    )
+
+
+def test_universe_size_sensitivity_portfolio_integration():
+    panel = pd.DataFrame(
+        {
+            "security_id": list(range(1, 11)),
+            "date": pd.to_datetime(
+                ["2025-01-31"] * 10
+            ),
+            "base_eligible": [True] * 10,
+            "lagged_market_cap": [
+                1000.0, 900.0, 800.0, 700.0, 600.0,
+                500.0, 400.0, 300.0, 200.0, 100.0,
+            ],
+            "momentum": [
+                0.10, 0.20, 0.30, 0.40, 0.50,
+                0.60, 0.70, 0.80, 0.90, 1.00,
+            ],
+            "momentum_eligible": [True] * 10,
+            "total_return": [
+                0.01, 0.02, 0.03, 0.04, 0.05,
+                0.06, 0.07, 0.08, 0.09, 0.10,
+            ],
+        }
+    )
+
+    top_5 = add_universe_membership(panel, n=5)
+    top_10 = add_universe_membership(panel, n=10)
+
+    top_5_ids = set(
+        top_5.loc[
+            top_5["in_universe"],
+            "security_id",
+        ]
+    )
+    top_10_ids = set(
+        top_10.loc[
+            top_10["in_universe"],
+            "security_id",
+        ]
+    )
+
+    assert top_5_ids == {1, 2, 3, 4, 5}
+    assert top_10_ids == set(range(1, 11))
+    assert top_5_ids.issubset(top_10_ids)
+
+    sorted_top_5 = assign_momentum_quintiles(top_5)
+    sorted_top_10 = assign_momentum_quintiles(top_10)
+
+    security_5_top_5 = sorted_top_5.loc[
+        sorted_top_5["security_id"] == 5,
+        "momentum_quintile",
+    ].iloc[0]
+
+    security_5_top_10 = sorted_top_10.loc[
+        sorted_top_10["security_id"] == 5,
+        "momentum_quintile",
+    ].iloc[0]
+
+    assert security_5_top_5 == 5
+    assert security_5_top_10 == 3
+
+    excluded_top_5 = sorted_top_5.loc[
+        sorted_top_5["security_id"].isin(
+            [6, 7, 8, 9, 10]
+        )
+    ]
+
+    assert excluded_top_5["momentum_quintile"].isna().all()
+
+    returns_top_5 = calculate_monthly_quintile_returns(sorted_top_5)
+    returns_top_10 = calculate_monthly_quintile_returns(sorted_top_10)
+
+    long_short_top_5 = (
+        calculate_monthly_long_short_returns(
+            returns_top_5
+        )
+    )
+    long_short_top_10 = (
+        calculate_monthly_long_short_returns(
+            returns_top_10
+        )
+    )
+
+    assert (
+        long_short_top_5.iloc[0]["long_short_return"]
+        == pytest.approx(0.04)
+    )
+
+    assert (
+        long_short_top_10.iloc[0]["long_short_return"]
+        == pytest.approx(0.08)
+    )
+
+
+def test_6_2_momentum_portfolio_analysis_integration():
+    dates = pd.date_range(
+        "2024-07-31",
+        "2025-01-31",
+        freq="ME",
+    )
+
+    records = []
+
+    for security_id in range(1, 11):
+        historical_return = security_id / 100.0
+
+        returns = [
+            historical_return,
+            historical_return,
+            historical_return,
+            historical_return,
+            historical_return,
+            np.nan,
+            historical_return,
+        ]
+
+        for date, total_return in zip(dates, returns):
+            records.append(
+                {
+                    "security_id": security_id,
+                    "date": date,
+                    "total_return": total_return,
+                    "in_universe": True,
+                }
+            )
+
+    panel = pd.DataFrame(records)
+
+    panel = add_momentum_signal(
+        panel,
+        start_lag=6,
+        end_lag=2,
+    )
+
+    panel = add_momentum_eligibility(
+        panel,
+        start_lag=6,
+        end_lag=2,
+    )
+
+    january = panel.loc[
+        panel["date"] == pd.Timestamp("2025-01-31")
+    ].sort_values("security_id")
+
+    assert len(january) == 10
+    assert january["momentum_eligible"].all()
+    assert january["momentum"].notna().all()
+    assert january["momentum"].is_monotonic_increasing
+
+    sorted_panel = assign_momentum_quintiles(
+        panel
+    )
+
+    january_sorted = sorted_panel.loc[
+        sorted_panel["date"] == pd.Timestamp("2025-01-31")
+    ]
+
+    q1_ids = set(
+        january_sorted.loc[
+            january_sorted["momentum_quintile"] == 1,
+            "security_id",
+        ]
+    )
+
+    q5_ids = set(
+        january_sorted.loc[
+            january_sorted["momentum_quintile"] == 5,
+            "security_id",
+        ]
+    )
+
+    assert q1_ids == {1, 2}
+    assert q5_ids == {9, 10}
+
+    quintile_returns = calculate_monthly_quintile_returns(
+        sorted_panel
+    )
+
+    long_short = calculate_monthly_long_short_returns(
+        quintile_returns
+    )
+
+    assert len(long_short) == 1
+
+    row = long_short.iloc[0]
+
+    assert row["date"] == pd.Timestamp("2025-01-31")
+    assert row["q1_return"] == pytest.approx(0.015)
+    assert row["q5_return"] == pytest.approx(0.095)
+    assert row["long_short_return"] == pytest.approx(0.08)
