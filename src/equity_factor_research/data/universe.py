@@ -58,7 +58,7 @@ def add_universe_membership(
     result["in_universe"] = False
 
     candidates = result.loc[
-        result["base_eligible"]
+        result["lagged_base_eligible"].eq(True)
         & result["lagged_market_cap"].notna()
     ].copy()
 
@@ -83,5 +83,38 @@ def add_universe_membership(
     )
 
     result.loc[selected_indices, "in_universe"] = True
+
+    return result
+
+
+def add_lagged_base_eligibility(panel: pd.DataFrame) -> pd.DataFrame:
+    """Add prior-calendar-month base eligibility."""
+
+    result = panel.copy()
+
+    previous = result[
+        [
+            "security_id",
+            "date",
+            "base_eligible",
+        ]
+    ].copy()
+
+    previous["date"] = (
+        previous["date"] + pd.offsets.MonthEnd(1)
+    )
+
+    previous = previous.rename(
+        columns={
+            "base_eligible": "lagged_base_eligible",
+        }
+    )
+
+    result = result.merge(
+        previous,
+        on=["security_id", "date"],
+        how="left",
+        validate="one_to_one",
+    )
 
     return result

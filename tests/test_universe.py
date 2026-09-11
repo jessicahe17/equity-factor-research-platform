@@ -6,6 +6,7 @@ from equity_factor_research.data.universe import (
     add_lagged_market_cap,
     add_base_eligibility,
     add_universe_membership,
+    add_lagged_base_eligibility,
 )
 
 
@@ -144,6 +145,13 @@ def test_add_universe_membership():
                 True,
                 True,
             ],
+            "lagged_base_eligible": [
+                True,
+                True,
+                True,
+                True,
+                True,
+            ],
             "lagged_market_cap": [
                 500.0,
                 400.0,
@@ -184,6 +192,12 @@ def test_add_universe_membership_excludes_unrankable_rows():
                 True,
                 True,
             ],
+            "lagged_base_eligible": [
+                True,
+                False,
+                True,
+                True,
+            ],
             "lagged_market_cap": [
                 500.0,
                 900.0,
@@ -218,6 +232,14 @@ def test_add_universe_membership_selects_separately_by_month():
                 ]
             ),
             "base_eligible": [
+                True,
+                True,
+                True,
+                True,
+                True,
+                True,
+            ],
+            "lagged_base_eligible": [
                 True,
                 True,
                 True,
@@ -316,6 +338,7 @@ def test_universe_construction_pipeline():
 
     result = add_lagged_market_cap(panel)
     result = add_base_eligibility(result)
+    result = add_lagged_base_eligibility(result)
     result = add_universe_membership(result, n=1)
 
     expected_lagged_market_cap = pd.Series(
@@ -347,3 +370,87 @@ def test_universe_construction_pipeline():
         result["in_universe"],
         expected_in_universe,
     )
+
+
+def test_add_lagged_base_eligibility_uses_previous_calendar_month():
+    panel = pd.DataFrame(
+        {
+            "security_id": ["A", "A", "A"],
+            "date": pd.to_datetime(
+                [
+                    "2025-01-31",
+                    "2025-02-28",
+                    "2025-03-31",
+                ]
+            ),
+            "base_eligible": [True, False, True],
+        }
+    )
+
+    result = add_lagged_base_eligibility(panel)
+
+    assert pd.isna(result.loc[0, "lagged_base_eligible"])
+    assert result.loc[1, "lagged_base_eligible"]
+    assert not result.loc[2, "lagged_base_eligible"]
+
+
+def test_add_lagged_base_eligibility_does_not_bridge_missing_month():
+    panel = pd.DataFrame(
+        {
+            "security_id": ["A", "A"],
+            "date": pd.to_datetime(
+                [
+                    "2025-01-31",
+                    "2025-03-31",
+                ]
+            ),
+            "base_eligible": [True, True],
+        }
+    )
+
+    result = add_lagged_base_eligibility(panel)
+
+    assert pd.isna(
+        result.loc[
+            result["date"] == pd.Timestamp("2025-03-31"),
+            "lagged_base_eligible",
+        ].iloc[0]
+    )
+
+
+def test_add_universe_membership_uses_lagged_base_eligibility():
+    panel = pd.DataFrame(
+        {
+            "security_id": ["A"],
+            "date": pd.to_datetime(["2025-02-28"]),
+            "base_eligible": [False],
+            "lagged_base_eligible": [True],
+            "lagged_market_cap": [100.0],
+        }
+    )
+
+    result = add_universe_membership(
+        panel,
+        n=1000,
+    )
+
+    assert result.loc[0, "in_universe"]
+
+
+def test_add_universe_membership_excludes_currently_eligible_stock_if_lagged_ineligible():
+    panel = pd.DataFrame(
+        {
+            "security_id": ["A"],
+            "date": pd.to_datetime(["2025-02-28"]),
+            "base_eligible": [True],
+            "lagged_base_eligible": [False],
+            "lagged_market_cap": [100.0],
+        }
+    )
+
+    result = add_universe_membership(
+        panel,
+        n=1000,
+    )
+
+    assert not result.loc[0, "in_universe"]

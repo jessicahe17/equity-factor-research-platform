@@ -11,6 +11,7 @@ from equity_factor_research.analysis.rank_ic import(
 )
 from equity_factor_research.data.universe import(
     add_universe_membership,
+    add_lagged_base_eligibility,
 )
 from equity_factor_research.analysis.portfolio_sorts import(
     assign_momentum_quintiles,
@@ -262,6 +263,7 @@ def test_robustness_comparison_integration():
                 ["2025-01-31"] * 10
             ),
             "base_eligible": [True] * 10,
+            "lagged_base_eligible": [True] * 10,
             "lagged_market_cap": [
                 1000.0, 900.0, 800.0, 700.0, 600.0,
                 500.0, 400.0, 300.0, 200.0, 100.0,
@@ -383,6 +385,10 @@ def test_robustness_pipeline_integration():
             )
 
     base_panel = pd.DataFrame(records)
+
+    base_panel = add_lagged_base_eligibility(
+        base_panel
+    )
 
     baseline = add_momentum_signal(
         base_panel,

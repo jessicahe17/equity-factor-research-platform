@@ -713,6 +713,7 @@ def test_universe_size_sensitivity_rank_ic_integration():
                 ["2025-01-31"] * 6
             ),
             "base_eligible": [True] * 6,
+            "lagged_base_eligible": [True] * 6,
             "lagged_market_cap": [600.0, 500.0, 400.0, 300.0, 200.0, 100.0],
             "momentum": [0.10, 0.20, 0.30, 0.40, 0.50, 0.60],
             "momentum_eligible": [True] * 6,

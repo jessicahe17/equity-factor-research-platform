@@ -1293,6 +1293,7 @@ def test_universe_size_sensitivity_portfolio_integration():
                 ["2025-01-31"] * 10
             ),
             "base_eligible": [True] * 10,
+            "lagged_base_eligible": [True] * 10,
             "lagged_market_cap": [
                 1000.0, 900.0, 800.0, 700.0, 600.0,
                 500.0, 400.0, 300.0, 200.0, 100.0,
