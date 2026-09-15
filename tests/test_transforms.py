@@ -188,3 +188,77 @@ def test_supplied_market_cap_preserved():
         [5_000_000_000.0],
     )
     pd.testing.assert_frame_equal(panel, original_panel)
+
+
+def test_construct_total_return_handles_nullable_delisting_return():
+    return_ex_delist = pd.Series(
+        [0.10, -0.40, 0.20, 0.05],
+        dtype="float64",
+    )
+
+    delisting_return = pd.Series(
+        [pd.NA, -0.30, -0.30, -0.30],
+        dtype="Float64",
+    )
+
+    delisting_event = pd.Series(
+        [False, True, True, True],
+        dtype=bool,
+    )
+
+    result = construct_total_return(
+        return_ex_delist,
+        delisting_return,
+        delisting_event,
+    )
+
+    expected = pd.Series(
+        [
+            0.10,
+            -0.58,
+            -0.16,
+            -0.265,
+        ],
+        dtype="float64",
+    )
+
+    pd.testing.assert_series_equal(
+        result,
+        expected,
+    )
+
+
+def test_construct_total_return_handles_large_nullable_delisting_return():
+    n = 4_000
+
+    return_ex_delist = pd.Series(
+        np.full(n, -0.40),
+        dtype="float64",
+    )
+
+    delisting_return = pd.Series(
+        pd.array(
+            np.full(n, -0.30),
+            dtype="Float64",
+        )
+    )
+
+    delisting_event = pd.Series(
+        np.ones(n, dtype=bool)
+    )
+
+    result = construct_total_return(
+        return_ex_delist,
+        delisting_return,
+        delisting_event,
+    )
+
+    expected = pd.Series(
+        np.full(n, -0.58),
+        dtype="float64",
+    )
+
+    pd.testing.assert_series_equal(
+        result,
+        expected,
+    )

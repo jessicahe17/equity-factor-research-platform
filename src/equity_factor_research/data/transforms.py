@@ -10,11 +10,20 @@ def construct_total_return(
     if delisting_event.isna().any():
         raise ValueError("delisting_event must not contain missing values.")
 
+    return_ex_delist = return_ex_delist.astype("float64")
+    delisting_return = delisting_return.astype("float64")
+
     total_return = return_ex_delist.copy()
 
-    compounded_return = (1 + return_ex_delist) * (1 + delisting_return) - 1
+    compounded_return = (
+        (1 + return_ex_delist)
+        * (1 + delisting_return)
+        - 1
+    )
 
-    total_return.loc[delisting_event] = compounded_return.loc[delisting_event]
+    total_return.loc[delisting_event] = (
+        compounded_return.loc[delisting_event]
+    )
 
     return total_return
 
