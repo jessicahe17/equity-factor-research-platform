@@ -26,3 +26,8 @@ htmlcov/
 # Local research data
 data/raw/
 data/processed/
+
+# Proprietary Compustat extracts
+compustat_secm_2000_2025.csv.gz
+compustat_sec_history_exchg.csv.gz
+compustat_security.csv.gz
