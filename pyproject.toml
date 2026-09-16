@@ -5,7 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "equity-factor-research-platform"
 version = "0.1.0"
-description = "A research-oriented platform for cross-sectional equity factor analysis."
+description = "A research-oriented Python platform for point-in-time cross-sectional equity factor analysis."
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26",
