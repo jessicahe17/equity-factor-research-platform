@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "A research-oriented Python platform for point-in-time cross-sectional equity factor analysis."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
@@ -26,3 +27,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[project.urls]
+Repository = "https://github.com/jessicahe17/equity-factor-research-platform"

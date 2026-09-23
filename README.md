@@ -122,6 +122,15 @@ To preserve point-in-time integrity, the data pipeline applies historical exchan
 
 Users with access to equivalent security-level data can adapt the ingestion layer while retaining the downstream factor, portfolio, and analysis components.
 
+### Data Attribution
+
+The empirical analysis uses Compustat data from S&P Global Market Intelligence accessed through Wharton Research Data Services (WRDS). The underlying licensed Compustat data are not distributed with this repository; only research code, methodology, derived aggregate results, and figures generated from the analysis are included.
+
+S&P Global Market Intelligence is the source of the underlying Compustat data and is not the source of the analysis, calculations, portfolio construction, or interpretation presented in this project.
+
+**WRDS acknowledgement:**
+Wharton Research Data Services (WRDS) was used in preparing this Equity Factor Research Platform. This service and the data available thereon constitute valuable intellectual property and trade secrets of WRDS and/or its third-party suppliers.
+
 ## Project Structure
 
 ```text
@@ -182,13 +191,13 @@ source .venv/bin/activate
 Install the project in editable mode together with the development dependencies:
 
 ```bash
-pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
 ```
 
 ### Run the Test Suite
 
 ```bash
-pytest
+python -m pytest
 ```
 
 The test suite covers data transformations, point-in-time universe construction, momentum signals, portfolio sorts, Rank IC analysis, robustness checks, and data-provider logic.

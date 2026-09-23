@@ -1,4 +1,7 @@
+import os
+
 import pandas as pd
+
 from equity_factor_research.data.providers.sharadar import (
     add_sharadar_monthly_returns,
     aggregate_sharadar_market_cap_to_monthly,
@@ -17,7 +20,14 @@ from equity_factor_research.data.universe import (
 
 
 BASE_URL = "https://api.sharadar.com/v1.0/data"
-API_KEY = "test-api-key"
+
+API_KEY = os.environ.get("SHARADAR_API_KEY")
+
+if not API_KEY:
+    raise RuntimeError(
+        "SHARADAR_API_KEY is not set. "
+        "Set the environment variable before running this script."
+    )
 
 TICKERS = "AAPL,MSFT,JPM"
 START_DATE = "2025-01-01"
